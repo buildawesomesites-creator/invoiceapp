@@ -14,7 +14,7 @@ input[type=text],input[type=number],select{width:100%;padding:8px;border:1px sol
 button{margin-top:6px;padding:8px 12px;background:#0572e6;border:none;color:#fff;border-radius:6px;cursor:pointer;}
 button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
 .receipt-wrap{background:#fff;padding:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
-.receipt{width:219px;padding:6px;background:#fff;color:#000;} /* exact 58mm */
+.receipt{width:219px;padding:6px;background:#fff;color:#000;}
 .center{text-align:center;}
 .right{text-align:right;}
 .small{font-size:11px;}
@@ -150,90 +150,98 @@ new QRious({element:document.getElementById("qrImg"),value:'https://www.papadums
 
 let products = [], items = [], unsubscribe = null;
 
+// 🔹 Fetch products from GitHub Pages (CORS-safe)
 async function loadProducts(){
-  const res=await fetch("https://raw.githubusercontent.com/buildawesomesites-creator/invoiceapp/main/products.json");
-  products=await res.json();
+  const res = await fetch("https://buildawesomesites-creator.github.io/invoiceapp/products.json");
+  products = await res.json();
 }
 loadProducts();
 
-function fmt(x){return (x||0).toLocaleString();}
+function showSync(){ syncing.style.display="block"; setTimeout(()=>syncing.style.display="none",1000); }
+function fmt(x){ return (x||0).toLocaleString(); }
 
-function renderItems(){
+function renderItems(newItems){
   itemsList.innerHTML='<div class="row header"><div>Item Name</div><div class="right">Price</div><div class="right">Qty</div><div class="right">Amount</div></div>';
   let total=0;
-  items.forEach(it=>{
-    const r=document.createElement('div'); r.className='row';
+  newItems.forEach(it=>{
+    const r=document.createElement('div');
+    r.className='row';
     r.innerHTML=`<div>${it.name}</div><div class="right">${fmt(it.price)}</div><div class="right">${it.qty}</div><div class="right">${fmt(it.price*it.qty)}</div>`;
     itemsList.appendChild(r);
     total+=it.price*it.qty;
   });
-  const disc=Number(discount.value||0);
-  const vat=(total-disc)*Number(vatPercent.value||0)/100;
   totalPrice.textContent = fmt(total);
-  discountLabel.textContent = fmt(disc);
-  vatPctLabel.textContent = vatPercent.value;
-  vatAmount.textContent = fmt(vat);
+  const disc = Number(discount.value||0); discountLabel.textContent=fmt(disc);
+  const vat = (total-disc)*Number(vatPercent.value||0)/100;
+  vatPctLabel.textContent = vatPercent.value; vatAmount.textContent = fmt(vat);
   grandTotal.textContent = fmt(total-disc+vat);
 }
 
-async function populateTables(){
+// 🔹 Load tables from Firestore
+async function populateTablesWithOrders(){
   const snapshot = await getDocs(collection(db,'tables'));
   tableSelect.innerHTML=''; tableDashboard.innerHTML='';
-  snapshot.forEach(docSnap=>{
-    const tname = docSnap.id;
+  snapshot.forEach(snap=>{
+    const tname = snap.id;
     tableSelect.innerHTML += `<option value="${tname}">${tname}</option>`;
-    const btn=document.createElement('button'); btn.textContent=tname;
-    btn.onclick=()=>loadTableData(tname);
+    const btn = document.createElement('button'); btn.textContent = tname;
+    btn.onclick = () => loadTableData(tname);
     tableDashboard.appendChild(btn);
   });
 }
 
+// 🔹 Load table data and listen for updates
 async function loadTableData(table){
   if(unsubscribe) unsubscribe();
   const docRef = doc(db,'tables',table);
-  const docSnap = await docRef.get();
-  if(docSnap.exists) items=docSnap.data().items||[];
-  renderItems();
-  tableLabel.textContent = table;
   unsubscribe = onSnapshot(docRef,snap=>{
-    if(snap.exists()) { items=snap.data().items||[]; renderItems(); }
+    items = snap.exists()?snap.data().items||[]:[];
+    renderItems(items);
+    tableLabel.textContent = table;
   });
 }
 
-addBtn.onclick=async()=>{
-  if(!tableSelect.value||!productSearch.value||!itemPrice.value||!itemQty.value) return alert('Fill all fields');
-  items.push({name:productSearch.value,price:Number(itemPrice.value),qty:Number(itemQty.value)});
-  renderItems();
-  await setDoc(doc(db,'tables',tableSelect.value),{items},{merge:true});
-  productSearch.value=''; itemPrice.value=''; itemQty.value=1;
-  syncing.style.display="block"; setTimeout(()=>syncing.style.display="none",1000);
-}
-
-clearBtn.onclick=async()=>{
-  if(!tableSelect.value) return;
-  if(!confirm('Clear all items?')) return;
-  items=[]; renderItems();
-  await setDoc(doc(db,'tables',tableSelect.value),{items},{merge:true});
-  syncing.style.display="block"; setTimeout(()=>syncing.style.display="none",1000);
-}
-
-productSearch.addEventListener('input',()=>{
-  const val=productSearch.value.toLowerCase().trim();
-  const sr=document.getElementById('searchResults'); sr.innerHTML=''; sr.style.display='none';
+// 🔹 Product search autocomplete
+productSearch.addEventListener('input',e=>{
+  const val = e.target.value.toLowerCase();
+  const sr = document.getElementById('searchResults');
+  sr.innerHTML=''; sr.style.display='none';
   if(!val) return;
-  const matched=products.filter(p=>p.name.toLowerCase().includes(val)).slice(0,10);
+  const matched = products.filter(p=>p.name.toLowerCase().includes(val)).slice(0,10);
   if(!matched.length) return;
   sr.style.display='block';
   matched.forEach(p=>{
-    const d=document.createElement('div'); d.textContent=p.name;
-    d.onclick=()=>{productSearch.value=p.name; itemPrice.value=p.price; sr.style.display='none';};
+    const d = document.createElement('div'); d.textContent=p.name;
+    d.onclick = ()=>{
+      productSearch.value = p.name; itemPrice.value=p.price; sr.style.display='none';
+    };
     sr.appendChild(d);
   });
 });
 
-tableSelect.addEventListener('change',()=>{ if(tableSelect.value) loadTableData(tableSelect.value); });
+// 🔹 Add item
+addBtn.onclick = async ()=>{
+  if(!tableSelect.value||!productSearch.value||!itemPrice.value||!itemQty.value) return alert('Fill all fields');
+  const newItem={name:productSearch.value,price:Number(itemPrice.value),qty:Number(itemQty.value)};
+  items.push(newItem); renderItems(items);
+  await setDoc(doc(db,'tables',tableSelect.value),{items},{merge:true});
+  productSearch.value=''; itemPrice.value=''; itemQty.value=1;
+  showSync();
+}
 
-populateTables();
+// 🔹 Clear items
+clearBtn.onclick = async ()=>{
+  if(!tableSelect.value) return;
+  if(!confirm('Clear all items?')) return;
+  items=[]; renderItems(items);
+  await setDoc(doc(db,'tables',tableSelect.value),{items},{merge:true});
+  showSync();
+}
+
+tableSelect.addEventListener('change',e=>{ if(e.target.value) loadTableData(e.target.value); });
+
+// Initialize
+populateTablesWithOrders();
 </script>
 </body>
 </html>
