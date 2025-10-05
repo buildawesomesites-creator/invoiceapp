@@ -102,7 +102,17 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
         </div>
       </div>
 
+      <!-- Footer info restored -->
       <div class="center" style="margin-top:8px;">
+        <div class="header-title">PAPADUMS INDIAN CUISINE</div>
+        <div class="small"><b>Address:</b> 35 Tran Hung Dao, District 1, HCM</div>
+        <div class="small"><b>Phone:</b> 0946 024 520</div>
+        <div class="small">WiFi: <b>Papadums Indian Cuisine 5G</b></div>
+        <div class="small">Password: <b>everyday</b></div>
+      </div>
+
+      <!-- QR Code -->
+      <div class="center" style="margin-top:6px;">
         <canvas id="qrImg" width="80" height="80"></canvas>
         <div class="small" style="margin-top:4px;">Invoice includes VAT</div>
       </div>
@@ -113,6 +123,9 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
 <div id="syncing">⟳ Syncing...</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot, getDocs, collection } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
@@ -126,11 +139,10 @@ const firebaseConfig = {
   messagingSenderId: "871292464773",
   appId: "1:871292464773:web:8f288ebc5f9db3352243ec"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// DOM Elements
+// DOM
 const syncing = document.getElementById("syncing");
 const tableSelect = document.getElementById("tableNumber");
 const tableDashboard = document.getElementById("tableDashboard");
@@ -152,21 +164,18 @@ const itemPrice = document.getElementById("itemPrice");
 const itemQty = document.getElementById("itemQty");
 const addBtn = document.getElementById("addBtn");
 const clearBtn = document.getElementById("clearBtn");
-const billNumber = document.getElementById("billNumber");
 
-const nowStr = () => new Date().toLocaleString('en-GB').replace(',','');
+let products = [], items = [], unsubscribe = null;
+
+// Current time
+const nowStr = ()=>new Date().toLocaleString('en-GB').replace(',','');
 timeIn.value = timeInLabel.textContent = nowStr();
 timeOut.value = timeOutLabel.textContent = nowStr();
 
 // QR Code
-new QRious({element:document.getElementById("qrImg"),value:'https://www.papadumsindiancuisine.com',size:80});
+new QRious({element:document.getElementById("qrImg"), value:'https://www.papadumsindiancuisine.com', size:80});
 
-let products = [], items = [], unsubscribe = null;
-
-// Show syncing indicator
 function showSync(){ syncing.style.display="block"; setTimeout(()=>syncing.style.display="none",1000); }
-
-// Format number
 function fmt(x){ return (x||0).toLocaleString(); }
 
 // Render items
@@ -178,10 +187,10 @@ function renderItems(newItems){
     r.className='row';
     r.innerHTML=`<div>${it.name}</div><div class="right">${fmt(it.price)}</div><div class="right">${it.qty}</div><div class="right">${fmt(it.price*it.qty)}</div>`;
     itemsList.appendChild(r);
-    total+=it.price*it.qty;
+    total += it.price*it.qty;
   });
   totalPrice.textContent = fmt(total);
-  const disc = Number(discount.value||0); discountLabel.textContent=fmt(disc);
+  const disc = Number(discount.value||0); discountLabel.textContent = fmt(disc);
   const vat = (total-disc)*Number(vatPercent.value||0)/100;
   vatPctLabel.textContent = vatPercent.value; vatAmount.textContent = fmt(vat);
   grandTotal.textContent = fmt(total-disc+vat);
@@ -194,55 +203,54 @@ async function loadProducts(){
 }
 loadProducts();
 
-// Populate tables from Firestore
-async function populateTablesWithOrders(){
+// Populate tables
+async function populateTables(){
   const snapshot = await getDocs(collection(db,'tables'));
   tableSelect.innerHTML=''; tableDashboard.innerHTML='';
-  snapshot.forEach(snap=>{
-    const tname = snap.id;
+  snapshot.forEach(docSnap=>{
+    const tname = docSnap.id;
     tableSelect.innerHTML += `<option value="${tname}">${tname}</option>`;
-    const btn = document.createElement('button'); btn.textContent = tname;
-    btn.onclick = () => loadTableData(tname);
+    const btn = document.createElement('button'); btn.textContent=tname;
+    btn.onclick = ()=>loadTableData(tname);
     tableDashboard.appendChild(btn);
   });
-  return true;
 }
 
-// Load table data and listen for updates
+// Load table data & listen
 async function loadTableData(table){
   if(unsubscribe) unsubscribe();
   const docRef = doc(db,'tables',table);
-  unsubscribe = onSnapshot(docRef, snap => {
+  unsubscribe = onSnapshot(docRef, snap=>{
     items = snap.exists()?snap.data().items||[]:[];
     renderItems(items);
     tableLabel.textContent = table;
   });
 }
 
-// Load first table on page load
+// Load first table
 async function loadFirstTable(){
   const snapshot = await getDocs(collection(db,'tables'));
-  if(snapshot.empty) return;
-  const firstTable = snapshot.docs[0].id;
-  tableSelect.value = firstTable;
-  loadTableData(firstTable);
+  if(!snapshot.empty){
+    const firstTable = snapshot.docs[0].id;
+    tableSelect.value = firstTable;
+    loadTableData(firstTable);
+  }
 }
 
-// Product search autocomplete
+// Product autocomplete
 productSearch.addEventListener('input',e=>{
-  const val = e.target.value.toLowerCase();
-  const sr = document.getElementById('searchResults');
+  const val=e.target.value.toLowerCase();
+  const sr=document.getElementById('searchResults');
   sr.innerHTML=''; sr.style.display='none';
   if(!val) return;
-  const matched = products.filter(p=>p.name.toLowerCase().includes(val)).slice(0,10);
+  const matched=products.filter(p=>p.name.toLowerCase().includes(val)).slice(0,10);
   if(!matched.length) return;
   sr.style.display='block';
   matched.forEach(p=>{
-    const d = document.createElement('div'); d.textContent=p.name;
+    const d=document.createElement('div'); d.textContent=p.name;
     d.onclick = ()=>{
-      productSearch.value = p.name; itemPrice.value=p.price; sr.style.display='none';
-    };
-    sr.appendChild(d);
+      productSearch.value=p.name; itemPrice.value=p.price; sr.style.display='none';
+    }; sr.appendChild(d);
   });
 });
 
@@ -265,11 +273,25 @@ clearBtn.onclick = async ()=>{
   showSync();
 }
 
-// Change table
-tableSelect.addEventListener('change',e=>{ if(e.target.value) loadTableData(e.target.value); });
+// Table change
+tableSelect.addEventListener('change', e=>{ if(e.target.value) loadTableData(e.target.value); });
 
-// Initialize tables
-await populateTablesWithOrders();
+// Print
+document.getElementById("printBtn").onclick = ()=>window.print();
+
+// Download PDF
+document.getElementById("downloadBtn").onclick = async ()=>{
+  const { jsPDF } = window.jspdf;
+  const invoice = document.getElementById("invoice");
+  const canvas = await html2canvas(invoice, { scale:2 });
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF({ unit:"mm", format:[58, canvas.height*58/canvas.width] });
+  pdf.addImage(imgData,"PNG",0,0,58,canvas.height*58/canvas.width);
+  pdf.save(`${tableSelect.value}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}.pdf`);
+};
+
+// Init
+await populateTables();
 await loadFirstTable();
 </script>
 </body>
