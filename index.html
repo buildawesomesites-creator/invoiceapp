@@ -65,7 +65,7 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
     </div>
   </div>
 
-    <div class="receipt-wrap">
+  <div class="receipt-wrap">
     <div class="receipt" id="invoice">
       <div class="center" style="margin-bottom:6px;">
         <div class="header-title">PAPADUMS INDIAN CUISINE</div>
@@ -123,13 +123,13 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBqkX9NYJD3SM8YcXf73P4IY9eT72KIyIw",
   authDomain: "invoiceapp-8026d.firebaseapp.com",
   projectId: "invoiceapp-8026d",
-  storageBucket: "invoiceapp-8026d.firebasestorage.app",
+  storageBucket: "invoiceapp-8026d.appspot.com",
   messagingSenderId: "871292464773",
   appId: "1:871292464773:web:8f288ebc5f9db3352243ec"
 };
@@ -159,98 +159,135 @@ const itemPrice = document.getElementById("itemPrice");
 const itemQty = document.getElementById("itemQty");
 const addBtn = document.getElementById("addBtn");
 const clearBtn = document.getElementById("clearBtn");
-const nowStr = () => new Date().toLocaleString('en-GB').replace(',','');
-timeIn.value = nowStr(); timeOut.value = nowStr();
-timeInLabel.textContent = nowStr(); timeOutLabel.textContent = nowStr();
-new QRious({element:document.getElementById("qrImg"),value:'https://www.papadumsindiancuisine.com',size:80});
+const billNumber = document.getElementById("billNumber");
+const billLabel = document.getElementById("billLabel");
 
-let products = [], items = [], unsubscribe = null, syncTimer = null;
-function fmt(x){return (x||0).toLocaleString();}
-function showSync(){syncing.style.display="block";clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncing.style.display="none",1000);}
-function renderItems(newItems){
- itemsList.innerHTML='<div class="row header"><div>Item Name</div><div class="right">Price</div><div class="right">Qty</div><div class="right">Amount</div></div>';
- let total=0;
- newItems.forEach(it=>{
-   const r=document.createElement('div');
-   r.className='row';
-   r.innerHTML=`<div>${it.name}</div><div class="right">${fmt(it.price)}</div><div class="right">${it.qty}</div><div class="right">${fmt(it.price*it.qty)}</div>`;
-   itemsList.appendChild(r);
-   total+=it.price*it.qty;
- });
- const d=parseFloat(discount.value)||0, v=parseFloat(vatPercent.value)||0;
- const vatAmt=Math.round((total-d)*v/100), grand=total-d+vatAmt;
- totalPrice.textContent=fmt(total); discountLabel.textContent=fmt(d);
- vatPctLabel.textContent=v; vatAmount.textContent=fmt(vatAmt); grandTotal.textContent=fmt(grand);
-}
+// Products array
+let products = [];
+let selectedTable = "";
 
-// Load only tables with orders
-async function populateTablesWithOrders(){
- tableDashboard.innerHTML = ""; tableSelect.innerHTML = "";
- const snap = await getDocs(collection(db,"tables"));
- snap.forEach(docSnap=>{
-   const data = docSnap.data();
-   if(data.items && data.items.length>0){
-     const t = docSnap.id;
-     // Dropdown
-     const o = document.createElement("option"); o.value=t; o.textContent=t; tableSelect.appendChild(o);
-     // Dashboard button
-     const btn = document.createElement("button"); btn.textContent=t;
-     btn.onclick=()=>{ tableSelect.value=t; tableLabel.textContent=t; loadTableData(t); };
-     tableDashboard.appendChild(btn);
-   }
- });
-}
-
-// Load table data in real-time
-async function loadTableData(table){
- if(unsubscribe) unsubscribe();
- const ref = doc(db,"tables",table);
- unsubscribe = onSnapshot(ref, snap=>{
-   const data = snap.data() || {items:[]};
-   items = data.items;
-   renderItems(items);
-   showSync();
- });
-}
-
-// Save items to Firestore
-async function saveToFirestore(){
- const table = tableSelect.value;
- if(!table) return;
- showSync();
- await setDoc(doc(db,"tables",table), {items});
- await populateTablesWithOrders();
-}
-
-// Add item
-addBtn.onclick=()=>{
- const n=productSearch.value.trim(), p=parseFloat(itemPrice.value)||0, q=parseInt(itemQty.value)||1;
- if(!n||p<=0) return alert("Enter valid product");
- const f = items.find(i=>i.name===n);
- if(f) f.qty+=q; else items.push({name:n,price:p,qty:q});
- renderItems(items); saveToFirestore();
- productSearch.value=""; itemPrice.value=""; itemQty.value=1;
-}
-
-// Clear table
-clearBtn.onclick=async()=>{
- if(!confirm("Clear all items for this table?")) return;
- items=[]; renderItems(items); await saveToFirestore();
-}
-
-// Table select change
-tableSelect.addEventListener("change", e=>{ const t=e.target.value; tableLabel.textContent=t; if(t) loadTableData(t); });
-
-// Load products (replace path with your products.json)
+// Load products from GitHub
 async function loadProducts() {
   const res = await fetch("https://raw.githubusercontent.com/buildawesomesites-creator/invoiceapp/main/products.json");
   products = await res.json();
 }
+loadProducts();
 
+// Populate tables from Firestore
+async function populateTablesWithOrders() {
+  const tablesCol = collection(db, "tables");
+  const snapshot = await getDocs(tablesCol);
+  tableDashboard.innerHTML = "";
+  tableSelect.innerHTML = '<option value="">Select Table</option>';
+  snapshot.forEach(docSnap => {
+    const tableName = docSnap.id;
+    const btn = document.createElement("button");
+    btn.textContent = tableName;
+    btn.onclick = () => selectTable(tableName);
+    tableDashboard.appendChild(btn);
+
+    const option = document.createElement("option");
+    option.value = tableName;
+    option.textContent = tableName;
+    tableSelect.appendChild(option);
+  });
+}
+
+// Select table
+function selectTable(name) {
+  selectedTable = name;
+  tableLabel.textContent = name;
+  loadTableData(name);
+}
+
+// Table select change
+tableSelect.addEventListener("change", e => {
+  const t = e.target.value;
+  if(t) selectTable(t);
+});
+
+// Load table data
+function loadTableData(tableName){
+  if(!tableName) return;
+  const docRef = doc(db, "tables", tableName);
+  onSnapshot(docRef, docSnap => {
+    if(!docSnap.exists()) return;
+    const data = docSnap.data();
+    renderItems(data.items || []);
+  });
+}
+
+// Render items
+function renderItems(items){
+  itemsList.innerHTML = '<div class="row header"><div>Item Name</div><div class="right">Price</div><div class="right">Qty</div><div class="right">Amount</div></div>';
+  let total = 0;
+  items.forEach(i=>{
+    const row = document.createElement("div");
+    row.className = "row";
+    const amount = i.price*i.qty;
+    total += amount;
+    row.innerHTML = `<div>${i.name}</div><div class="right">${i.price}</div><div class="right">${i.qty}</div><div class="right">${amount}</div>`;
+    itemsList.appendChild(row);
+  });
+  totalPrice.textContent = total;
+  const disc = Number(discount.value || 0);
+  discountLabel.textContent = disc;
+  const vatPct = Number(vatPercent.value || 0);
+  vatPctLabel.textContent = vatPct;
+  const vatVal = ((total-disc)*vatPct)/100;
+  vatAmount.textContent = vatVal;
+  grandTotal.textContent = total-disc+vatVal;
+}
+
+// Autocomplete search
+productSearch.addEventListener("input", e => {
+  const query = e.target.value.toLowerCase();
+  const results = products.filter(p => p.name.toLowerCase().includes(query));
+  const resultsDiv = document.getElementById("searchResults");
+  resultsDiv.innerHTML = "";
+  if (results.length === 0) { resultsDiv.style.display="none"; return; }
+  results.forEach(p=>{
+    const div = document.createElement("div");
+    div.textContent = p.name;
+    div.onclick = () => {
+      productSearch.value = p.name;
+      itemPrice.value = p.price;
+      resultsDiv.style.display="none";
+    };
+    resultsDiv.appendChild(div);
+  });
+  resultsDiv.style.display="block";
+});
+
+// Add item
+addBtn.addEventListener("click", async ()=>{
+  if(!selectedTable) return alert("Select a table first!");
+  const name = productSearch.value;
+  const price = Number(itemPrice.value);
+  const qty = Number(itemQty.value);
+  if(!name || !price || !qty) return alert("Enter product, price and qty");
+  const docRef = doc(db,"tables",selectedTable);
+  const snap = await getDocs(collection(db,"tables"));
+  const docSnap = await docRef.get?.() || {};
+  const items = (docSnap.data?.()?.items)||[];
+  items.push({name,price,qty});
+  await setDoc(docRef,{items},{merge:true});
+  productSearch.value=""; itemPrice.value=""; itemQty.value=1;
+});
+
+// Clear items
+clearBtn.addEventListener("click", async ()=>{
+  if(!selectedTable) return alert("Select a table first!");
+  if(confirm("Clear all items?")){
+    await setDoc(doc(db,"tables",selectedTable),{items:[]},{merge:true});
+  }
+});
+
+// Print
+document.getElementById("printBtn").addEventListener("click",()=>window.print());
 
 // Initialize
 populateTablesWithOrders();
-loadProducts();
 </script>
 </body>
 </html>
