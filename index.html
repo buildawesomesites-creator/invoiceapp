@@ -65,7 +65,7 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
     </div>
   </div>
 
-  <div class="receipt-wrap">
+    <div class="receipt-wrap">
     <div class="receipt" id="invoice">
       <div class="center" style="margin-bottom:6px;">
         <div class="header-title">PAPADUMS INDIAN CUISINE</div>
@@ -246,6 +246,7 @@ async function loadProducts() {
   const res = await fetch("https://raw.githubusercontent.com/buildawesomesites-creator/invoiceapp/main/products.json");
   products = await res.json();
 }
+
 
 // Initialize
 populateTablesWithOrders();
