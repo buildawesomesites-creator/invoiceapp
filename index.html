@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Papadums Invoice — Multi-User</title>
+<title>Papadums Invoice — Live Multi-User Persistent</title>
 <style>
 *{box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;padding:16px;}
 .app{display:flex;gap:16px;align-items:flex-start;}
-.controls{width:360px;background:#fff;padding:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0;}
+.controls{width:360px;background:#fff;padding:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
 label{display:block;margin-top:8px;font-size:13px;}
-input[type=text],input[type=number],select{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;}
+input[type=text],input[type=number],select{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;box-sizing:border-box;}
 button{margin-top:6px;padding:8px 12px;background:#0572e6;border:none;color:#fff;border-radius:6px;cursor:pointer;}
 button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
 .receipt-wrap{background:#fff;padding:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
-.receipt{width:219px;padding:6px;background:#fff;color:#000;}
+.receipt{width:calc(58mm*3.78px);padding:6px;background:#fff;color:#000;}
 .center{text-align:center;}
 .right{text-align:right;}
 .small{font-size:11px;}
@@ -37,15 +37,23 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
   <div class="controls">
     <h3>Table Dashboard</h3>
     <div id="tableDashboard" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-    <label>Bàn Number <select id="tableNumber"></select></label>
-    <label>Search Product <input id="productSearch" type="text" placeholder="Type product name..." autocomplete="off" style="font-size:14px;padding:10px;"></label>
+
+    <label>Bàn Number
+      <select id="tableNumber"></select>
+    </label>
+
+    <label>Search Product
+      <input id="productSearch" type="text" placeholder="Type product name..." autocomplete="off" style="font-size:14px;padding:10px;">
+    </label>
     <div id="searchResults"></div>
+
     <label>Price <input id="itemPrice" type="number"></label>
     <label>Qty <input id="itemQty" type="number" value="1" min="1"></label>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button id="addBtn">Add Item</button>
       <button id="clearBtn" class="ghost">Clear Items</button>
     </div>
+
     <label>Bill Number <input id="billNumber" type="text" value="HD001691"></label>
     <label>Time In <input id="timeIn" type="text"></label>
     <label>Time Out <input id="timeOut" type="text"></label>
@@ -67,7 +75,9 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-        <div style="border:1px solid #000;padding:4px;border-radius:8px;font-size:12px;font-weight:700"><span id="tableLabel">Bàn 1</span></div>
+        <div style="border:1px solid #000;padding:4px;border-radius:8px;font-size:12px;font-weight:700">
+          <span id="tableLabel">Bàn 1</span>
+        </div>
         <div style="text-align:center">
           <div style="font-weight:700">INVOICE</div>
           <div class="small" style="font-weight:700">Bill number: <span id="billLabel">HD001691</span></div>
@@ -103,11 +113,11 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
 <div id="syncing">⟳ Syncing...</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot, getDocs, collection } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyBqkX9NYJD3SM8YcXf73P4IY9eT72KIyIw",
   authDomain: "invoiceapp-8026d.firebaseapp.com",
@@ -120,6 +130,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// DOM Elements
 const syncing = document.getElementById("syncing");
 const tableSelect = document.getElementById("tableNumber");
 const tableDashboard = document.getElementById("tableDashboard");
@@ -146,20 +157,19 @@ const billNumber = document.getElementById("billNumber");
 const nowStr = () => new Date().toLocaleString('en-GB').replace(',','');
 timeIn.value = timeInLabel.textContent = nowStr();
 timeOut.value = timeOutLabel.textContent = nowStr();
+
+// QR Code
 new QRious({element:document.getElementById("qrImg"),value:'https://www.papadumsindiancuisine.com',size:80});
 
 let products = [], items = [], unsubscribe = null;
 
-// 🔹 Fetch products from GitHub Pages (CORS-safe)
-async function loadProducts(){
-  const res = await fetch("https://buildawesomesites-creator.github.io/invoiceapp/products.json");
-  products = await res.json();
-}
-loadProducts();
-
+// Show syncing indicator
 function showSync(){ syncing.style.display="block"; setTimeout(()=>syncing.style.display="none",1000); }
+
+// Format number
 function fmt(x){ return (x||0).toLocaleString(); }
 
+// Render items
 function renderItems(newItems){
   itemsList.innerHTML='<div class="row header"><div>Item Name</div><div class="right">Price</div><div class="right">Qty</div><div class="right">Amount</div></div>';
   let total=0;
@@ -177,7 +187,14 @@ function renderItems(newItems){
   grandTotal.textContent = fmt(total-disc+vat);
 }
 
-// 🔹 Load tables from Firestore
+// Load products from GitHub
+async function loadProducts(){
+  const res = await fetch("https://buildawesomesites-creator.github.io/invoiceapp/products.json");
+  products = await res.json();
+}
+loadProducts();
+
+// Populate tables from Firestore
 async function populateTablesWithOrders(){
   const snapshot = await getDocs(collection(db,'tables'));
   tableSelect.innerHTML=''; tableDashboard.innerHTML='';
@@ -188,20 +205,30 @@ async function populateTablesWithOrders(){
     btn.onclick = () => loadTableData(tname);
     tableDashboard.appendChild(btn);
   });
+  return true;
 }
 
-// 🔹 Load table data and listen for updates
+// Load table data and listen for updates
 async function loadTableData(table){
   if(unsubscribe) unsubscribe();
   const docRef = doc(db,'tables',table);
-  unsubscribe = onSnapshot(docRef,snap=>{
+  unsubscribe = onSnapshot(docRef, snap => {
     items = snap.exists()?snap.data().items||[]:[];
     renderItems(items);
     tableLabel.textContent = table;
   });
 }
 
-// 🔹 Product search autocomplete
+// Load first table on page load
+async function loadFirstTable(){
+  const snapshot = await getDocs(collection(db,'tables'));
+  if(snapshot.empty) return;
+  const firstTable = snapshot.docs[0].id;
+  tableSelect.value = firstTable;
+  loadTableData(firstTable);
+}
+
+// Product search autocomplete
 productSearch.addEventListener('input',e=>{
   const val = e.target.value.toLowerCase();
   const sr = document.getElementById('searchResults');
@@ -219,7 +246,7 @@ productSearch.addEventListener('input',e=>{
   });
 });
 
-// 🔹 Add item
+// Add item
 addBtn.onclick = async ()=>{
   if(!tableSelect.value||!productSearch.value||!itemPrice.value||!itemQty.value) return alert('Fill all fields');
   const newItem={name:productSearch.value,price:Number(itemPrice.value),qty:Number(itemQty.value)};
@@ -229,7 +256,7 @@ addBtn.onclick = async ()=>{
   showSync();
 }
 
-// 🔹 Clear items
+// Clear items
 clearBtn.onclick = async ()=>{
   if(!tableSelect.value) return;
   if(!confirm('Clear all items?')) return;
@@ -238,10 +265,12 @@ clearBtn.onclick = async ()=>{
   showSync();
 }
 
+// Change table
 tableSelect.addEventListener('change',e=>{ if(e.target.value) loadTableData(e.target.value); });
 
-// Initialize
-populateTablesWithOrders();
+// Initialize tables
+await populateTablesWithOrders();
+await loadFirstTable();
 </script>
 </body>
 </html>
