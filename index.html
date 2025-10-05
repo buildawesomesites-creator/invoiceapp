@@ -242,7 +242,10 @@ clearBtn.onclick=async()=>{
 tableSelect.addEventListener("change", e=>{ const t=e.target.value; tableLabel.textContent=t; if(t) loadTableData(t); });
 
 // Load products (replace path with your products.json)
-async function loadProducts(){ const res = await fetch("products.json"); products = await res.json(); }
+async function loadProducts() {
+  const res = await fetch("https://raw.githubusercontent.com/buildawesomesites-creator/invoiceapp/main/products.json");
+  products = await res.json();
+}
 
 // Initialize
 populateTablesWithOrders();
