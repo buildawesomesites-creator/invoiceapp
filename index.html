@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Papadums Invoice — Live Multi-User Persistent</title>
+<title>Papadums Invoice — Live Multi-User</title>
 <style>
-*{box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;padding:16px;}
 .app{display:flex;gap:16px;align-items:flex-start;}
 .controls{width:360px;background:#fff;padding:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
@@ -29,7 +28,7 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
 @media print{.controls{display:none}.receipt{box-shadow:none;border-radius:0;margin:0}}
 .header-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;font-size:12px;}
 #tableDashboard button{padding:6px 10px;font-size:13px;}
-#syncing{position:fixed;bottom:10px;right:10px;background:rgba(255,102,0,0.9);color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;display:none;}
+#syncing{position:fixed;bottom:10px;right:10px;background:rgba(255,102,0,0.9);color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;font-family:sans-serif;display:none;}
 </style>
 </head>
 <body>
@@ -102,7 +101,6 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
         </div>
       </div>
 
-      <!-- Footer info restored -->
       <div class="center" style="margin-top:8px;">
         <div class="header-title">PAPADUMS INDIAN CUISINE</div>
         <div class="small"><b>Address:</b> 35 Tran Hung Dao, District 1, HCM</div>
@@ -111,7 +109,6 @@ button.ghost{background:#fff;color:#222;border:1px solid #ddd;}
         <div class="small">Password: <b>everyday</b></div>
       </div>
 
-      <!-- QR Code -->
       <div class="center" style="margin-top:6px;">
         <canvas id="qrImg" width="80" height="80"></canvas>
         <div class="small" style="margin-top:4px;">Invoice includes VAT</div>
@@ -135,7 +132,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBqkX9NYJD3SM8YcXf73P4IY9eT72KIyIw",
   authDomain: "invoiceapp-8026d.firebaseapp.com",
   projectId: "invoiceapp-8026d",
-  storageBucket: "invoiceapp-8026d.firebasestorage.app",
+  storageBucket: "invoiceapp-8026d.appspot.com",
   messagingSenderId: "871292464773",
   appId: "1:871292464773:web:8f288ebc5f9db3352243ec"
 };
@@ -166,133 +163,125 @@ const addBtn = document.getElementById("addBtn");
 const clearBtn = document.getElementById("clearBtn");
 
 let products = [], items = [], unsubscribe = null;
-
-// Current time
 const nowStr = ()=>new Date().toLocaleString('en-GB').replace(',','');
 timeIn.value = timeInLabel.textContent = nowStr();
 timeOut.value = timeOutLabel.textContent = nowStr();
 
-// QR Code
+// QR code
 new QRious({element:document.getElementById("qrImg"), value:'https://www.papadumsindiancuisine.com', size:80});
-
 function showSync(){ syncing.style.display="block"; setTimeout(()=>syncing.style.display="none",1000); }
 function fmt(x){ return (x||0).toLocaleString(); }
 
-// Render items
 function renderItems(newItems){
-  itemsList.innerHTML='<div class="row header"><div>Item Name</div><div class="right">Price</div><div class="right">Qty</div><div class="right">Amount</div></div>';
+  itemsList.innerHTML = '<div class="row header"><div>Item Name</div><div class="right">Price</div><div class="right">Qty</div><div class="right">Amount</div></div>';
   let total=0;
   newItems.forEach(it=>{
     const r=document.createElement('div');
     r.className='row';
     r.innerHTML=`<div>${it.name}</div><div class="right">${fmt(it.price)}</div><div class="right">${it.qty}</div><div class="right">${fmt(it.price*it.qty)}</div>`;
     itemsList.appendChild(r);
-    total += it.price*it.qty;
+    total+=it.price*it.qty;
   });
-  totalPrice.textContent = fmt(total);
-  const disc = Number(discount.value||0); discountLabel.textContent = fmt(disc);
-  const vat = (total-disc)*Number(vatPercent.value||0)/100;
-  vatPctLabel.textContent = vatPercent.value; vatAmount.textContent = fmt(vat);
-  grandTotal.textContent = fmt(total-disc+vat);
+  totalPrice.textContent=fmt(total);
+  const disc=Number(discount.value||0);
+  discountLabel.textContent=fmt(disc);
+  const vat=(total-disc)*Number(vatPercent.value||0)/100;
+  vatPctLabel.textContent=vatPercent.value;
+  vatAmount.textContent=fmt(vat);
+  grandTotal.textContent=fmt(total-disc+vat);
 }
 
-// Load products from GitHub
+// Populate only tables with orders
+async function populateTables(){
+  const snapshot = await getDocs(collection(db,'tables'));
+  tableSelect.innerHTML = '';
+  tableDashboard.innerHTML = '';
+  snapshot.forEach(docSnap=>{
+    const data = docSnap.data();
+    if(data.items && data.items.length > 0){
+      const tname = docSnap.id;
+      tableSelect.innerHTML += `<option value="${tname}">${tname}</option>`;
+      const btn = document.createElement('button');
+      btn.textContent = tname;
+      btn.onclick = ()=>loadTableData(tname);
+      tableDashboard.appendChild(btn);
+    }
+  });
+}
+
+// Load table data
+async function loadTableData(table){
+  if(unsubscribe) unsubscribe();
+  const docRef = doc(db,'tables',table);
+  const docSnap = await getDocs(doc(db,'tables',table));
+  const docData = (await docRef.get())?.data() || { items: [] };
+  items = docData.items || [];
+  renderItems(items);
+  tableLabel.textContent = table;
+  unsubscribe = onSnapshot(docRef, snap=>{
+    if(snap.exists()){ items = snap.data().items || []; renderItems(items); populateTables(); }
+  });
+}
+
+// Load products
 async function loadProducts(){
-  const res = await fetch("https://buildawesomesites-creator.github.io/invoiceapp/products.json");
+  const res = await fetch("https://raw.githubusercontent.com/buildawesomesites-creator/invoiceapp/main/products.json");
   products = await res.json();
 }
 loadProducts();
 
-// Populate tables
-async function populateTables(){
-  const snapshot = await getDocs(collection(db,'tables'));
-  tableSelect.innerHTML=''; tableDashboard.innerHTML='';
-  snapshot.forEach(docSnap=>{
-    const tname = docSnap.id;
-    tableSelect.innerHTML += `<option value="${tname}">${tname}</option>`;
-    const btn = document.createElement('button'); btn.textContent=tname;
-    btn.onclick = ()=>loadTableData(tname);
-    tableDashboard.appendChild(btn);
-  });
-}
-
-// Load table data & listen
-async function loadTableData(table){
-  if(unsubscribe) unsubscribe();
-  const docRef = doc(db,'tables',table);
-  unsubscribe = onSnapshot(docRef, snap=>{
-    items = snap.exists()?snap.data().items||[]:[];
-    renderItems(items);
-    tableLabel.textContent = table;
-  });
-}
-
-// Load first table
-async function loadFirstTable(){
-  const snapshot = await getDocs(collection(db,'tables'));
-  if(!snapshot.empty){
-    const firstTable = snapshot.docs[0].id;
-    tableSelect.value = firstTable;
-    loadTableData(firstTable);
-  }
-}
-
-// Product autocomplete
+// Product search autocomplete
 productSearch.addEventListener('input',e=>{
-  const val=e.target.value.toLowerCase();
-  const sr=document.getElementById('searchResults');
+  const val = e.target.value.toLowerCase();
+  const sr = document.getElementById('searchResults');
   sr.innerHTML=''; sr.style.display='none';
   if(!val) return;
-  const matched=products.filter(p=>p.name.toLowerCase().includes(val)).slice(0,10);
+  const matched = products.filter(p=>p.name.toLowerCase().includes(val)).slice(0,10);
   if(!matched.length) return;
   sr.style.display='block';
   matched.forEach(p=>{
     const d=document.createElement('div'); d.textContent=p.name;
-    d.onclick = ()=>{
+    d.onclick=()=>{
       productSearch.value=p.name; itemPrice.value=p.price; sr.style.display='none';
     }; sr.appendChild(d);
   });
 });
 
 // Add item
-addBtn.onclick = async ()=>{
+addBtn.onclick=async()=>{
   if(!tableSelect.value||!productSearch.value||!itemPrice.value||!itemQty.value) return alert('Fill all fields');
   const newItem={name:productSearch.value,price:Number(itemPrice.value),qty:Number(itemQty.value)};
-  items.push(newItem); renderItems(items);
+  items.push(newItem);
+  renderItems(items);
   await setDoc(doc(db,'tables',tableSelect.value),{items},{merge:true});
   productSearch.value=''; itemPrice.value=''; itemQty.value=1;
-  showSync();
+  showSync(); populateTables();
 }
 
 // Clear items
-clearBtn.onclick = async ()=>{
+clearBtn.onclick=async()=>{
   if(!tableSelect.value) return;
   if(!confirm('Clear all items?')) return;
   items=[]; renderItems(items);
   await setDoc(doc(db,'tables',tableSelect.value),{items},{merge:true});
-  showSync();
+  showSync(); populateTables();
 }
 
-// Table change
+// Change table
 tableSelect.addEventListener('change', e=>{ if(e.target.value) loadTableData(e.target.value); });
 
-// Print
-document.getElementById("printBtn").onclick = ()=>window.print();
-
-// Download PDF
-document.getElementById("downloadBtn").onclick = async ()=>{
+// Print & Download PDF
+document.getElementById('printBtn').onclick = ()=>window.print();
+document.getElementById('downloadBtn').onclick = async()=>{
   const { jsPDF } = window.jspdf;
-  const invoice = document.getElementById("invoice");
-  const canvas = await html2canvas(invoice, { scale:2 });
-  const imgData = canvas.toDataURL("image/png");
-  const pdf = new jsPDF({ unit:"mm", format:[58, canvas.height*58/canvas.width] });
-  pdf.addImage(imgData,"PNG",0,0,58,canvas.height*58/canvas.width);
-  pdf.save(`${tableSelect.value}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}.pdf`);
-};
+  const c = await html2canvas(document.getElementById('invoice'));
+  const p = new jsPDF({unit:'mm', format:[58, c.height*58/c.width]});
+  p.addImage(c.toDataURL('image/png'),'PNG',0,0,58,c.height*58/c.width); 
+  p.save(`${tableSelect.value}_${Date.now()}.pdf`);
+}
 
 // Init
-await populateTables();
-await loadFirstTable();
+populateTables();
 </script>
 </body>
 </html>
