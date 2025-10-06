@@ -315,8 +315,7 @@ delAllBtn.onclick = async () => {
   for (const docSnap of snapshot.docs) {
     await updateDoc(doc(db, "tables", docSnap.id), { items: [] }); // clear only 'items'
   }
-  alert("✅ All table entries cleared successfully!");
-  showSync();
+ 
 };
 
 // Append it after the other buttons
