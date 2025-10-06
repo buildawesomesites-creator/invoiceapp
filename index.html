@@ -300,6 +300,29 @@ document.getElementById("downloadBtn").onclick = async ()=>{
 
 // Init
 await populateTables();
+
+// Delete all entries in Firebase tables (but keep the tables)
+import { deleteField, updateDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+
+// Create button at the bottom of control panel
+const delAllBtn = document.createElement('button');
+delAllBtn.textContent = "🗑️ Delete All Entries";
+delAllBtn.style.background = "#d9534f";
+delAllBtn.style.marginTop = "12px";
+delAllBtn.onclick = async () => {
+  if (!confirm("⚠️ Delete all entries in all tables? This cannot be undone.")) return;
+  const snapshot = await getDocs(collection(db, "tables"));
+  for (const docSnap of snapshot.docs) {
+    await updateDoc(doc(db, "tables", docSnap.id), { items: [] }); // clear only 'items'
+  }
+  alert("✅ All table entries cleared successfully!");
+  showSync();
+};
+
+// Append it after the other buttons
+document.querySelector('.controls').appendChild(delAllBtn);
+
+
 </script>
 </body>
 </html>
